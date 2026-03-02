@@ -4,18 +4,18 @@ import type { Resp } from "./parser";
 export function decode(resp: Resp): any {
   switch (resp.type) {
     case "simple_string":
-    case "integer":
     case "bulk_string":
+    case "simple_error":
+    case "bulk_error":
+    case "verbatim":
+      if (resp.value === null) return null;
+      return Buffer.from(resp.value, "latin1").toString("utf8");
+
+    case "integer":
     case "boolean":
     case "double":
     case "bignumber":
-    case "verbatim":
       return resp.value;
-
-    case "simple_error":
-    case "bulk_error":
-      // Returning an Error object for errors
-      return new Error(resp.value);
 
     case "null":
       return null;
@@ -75,7 +75,9 @@ export function encode(val: any): string {
 
   if (typeof val === "string") {
     // use bulk string for general strings to be safe
-    return `$${Buffer.byteLength(val)}\r\n${val}\r\n`;
+    const latin1Val = Buffer.from(val, "utf8").toString("latin1");
+    // Since latin1 has 1 char = 1 byte, latin1Val.length is the byte length.
+    return `$${latin1Val.length}\r\n${latin1Val}\r\n`;
   }
 
   if (Array.isArray(val)) {
@@ -96,7 +98,8 @@ export function encode(val: any): string {
   }
 
   if (val instanceof Error) {
-    return `-${val.message}\r\n`;
+    const message = Buffer.from(val.message, "utf8").toString("latin1");
+    return `-${message}\r\n`;
   }
 
   if (typeof val === "object") {
@@ -112,11 +115,11 @@ export function encode(val: any): string {
   return "";
 }
 
-// Helper to marshal a Redis command array to RESP bulk strings.
 export function encodeCommand(args: string[]): string {
   let res = `*${args.length}\r\n`;
   for (const arg of args) {
-    res += `$${Buffer.byteLength(arg)}\r\n${arg}\r\n`;
+    const latin1Arg = Buffer.from(arg, "utf8").toString("latin1");
+    res += `$${latin1Arg.length}\r\n${latin1Arg}\r\n`;
   }
   return res;
 }
